@@ -1,0 +1,18 @@
+name: nyx-wiki-recall
+version: "0.1.0"
+# Hook plugin. Without this line Hermes sees register_memory_provider in __init__.py,
+# treats the plugin as exclusive, and never loads the pre_llm_call hook.
+kind: standalone
+description: "Attach short wiki glimpses chosen by a decision model, and write a daily transcript of every turn. The full article is a tool call."
+license: MIT
+requires_hermes: ">=0.22.5"
+provides_hooks:
+  - pre_llm_call
+  - post_llm_call
+provides_tools:
+  - wiki_read
+requires_env:
+  - name: OPENROUTER_API_KEY
+    description: "OpenRouter key for the Decisions API"
+    url: "https://openrouter.ai/keys"
+    secret: true

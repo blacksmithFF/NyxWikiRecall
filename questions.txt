@@ -1,0 +1,231 @@
+# questions.txt — wording and settings for NyxWikiRecall
+#
+# Hermes rereads this file on every message. Save it, and the next message
+# uses your edits.
+#
+# How this file works
+# A line that starts with # is a note for you. Hermes ignores it.
+# Inside a section, a line that starts with ## or ### is a heading, and it is sent.
+#
+# Settings look like:  name = value
+# Repeat skip.line, skip.short, skip.dir, or skip.turn to add another rule.
+#
+# A section starts with [name] on its own line and runs until the next [name]
+# or the next setting. Section text is sent as written, except for the
+# placeholders below.
+#
+# Placeholders — Hermes replaces only these
+#   {label}    title and path, such as Garden [garden]
+#   {glimpse}  the glimpse from that page or folder
+#   {title}    the page title, such as Soil
+#   {path}     the file path, such as garden/soil.md
+#   {slug}     the short name, such as soil
+#   {score}    JEV's score for that page, such as 0.86 (a line with {score} is
+#              left out when a page has no score)
+#   {pages}    a list of pages, such as Soil (garden/soil.md)
+#   {query}    the name passed to wiki_read
+#   {paths}    matching file paths, one per line
+#
+# How pages are chosen
+# JEV is the decision model. It scores each folder and page from 0 to 1.
+# Hermes includes it when the score is at least threshold.
+#
+# For each candidate, JEV reads the recent conversation, then one question
+# ([folder.instructions], [child.instructions], or [article.instructions]),
+# then the matching yes sentence and no sentence.
+#
+# The plugin labels that conversation with these headings. They are ordinary
+# words, not settings, and Hermes does not replace them:
+#   Earlier message:  something said before the latest message
+#   Reply:            the reply that followed
+#   New message:      the message to answer now
+#
+# The sections at the bottom are what JEV and the AI actually read.
+# Edit those to change the questions or the sentences the AI sees.
+
+# Include a folder or page when JEV's score is this high or higher.
+threshold = 0.5
+# Show at most this many pages per message, highest score first. 0 or blank means no cap.
+max.pages = 8
+# Decision model JEV uses.
+model = typesafe/jev-1.13
+# Where Hermes sends the questions.
+decisions.url = https://openrouter.ai/api/alpha/decisions
+# Stop asking new questions after this many seconds.
+# A page whose score already reached threshold is still included.
+budget.seconds = 20
+# Trim the conversation sent to JEV to this many characters, keeping the newest part.
+message.chars = 20000
+
+# How much conversation JEV sees.
+# 1: only the new message.
+# 2: also the previous message and the replies that followed it.
+context.turns = 2
+
+# provider = no keeps NyxWikiRecall as a hook beside the memory provider Hermes already uses.
+# provider = yes lets NyxWikiRecall serve as Hermes's memory provider, in place of the one
+# Hermes had. This file does not change Hermes's settings. You also choose the provider in
+# Hermes the normal way, then restart Hermes:
+#   hermes memory setup            (pick nyx-wiki-recall)
+#   or in config.yaml:  memory:
+#                         provider: nyx-wiki-recall
+# Until both say nyx-wiki-recall, glimpses stay on the hook and the log says why.
+provider = no
+
+# Look the wiki up on scheduled (cron) jobs too. yes or no. With no (the default), a cron
+# job's turn gets no glimpses and costs no decision-model call. Its transcript is not changed.
+lookups.on_cron = no
+
+# Folder of page paths and scores, one file per day (YYYY-MM-DD.jsonl), one line per lookup.
+# The transcript reads it for its Wiki pages: lines. Blank: suggestions/ in the plugin's data
+# folder, <Hermes home>/plugin-data/nyx-wiki-recall/. off: no files.
+suggestions.folder =
+
+# Daily transcripts. yes or no. With yes, every turn is recorded and one Markdown file per day
+# is written, then finished after midnight. Nothing else needs to be installed.
+transcript = yes
+# Folder for the daily files. Blank: transcripts/ in the plugin's data folder.
+transcript.folder =
+# Who said a message. In a shared chat (a group, channel or thread) Hermes puts the sender's
+# display name in front, like [Robin], and that name is used. In a direct message or the CLI a
+# leading [...] is part of the message: the name the chat platform gives is used, and with none,
+# this name.
+transcript.user.name = User
+# Name for the agent's replies.
+transcript.assistant.name = Assistant
+# Show a chat display name as another name. One line per name.
+# Example: transcript.alias = gardener_42 -> Robin
+# Turns from these Hermes platforms are not recorded. Comma-separated.
+# cron is scheduled jobs; subagent is delegated work.
+transcript.skip.platforms = cron, subagent
+# Also keep the channel lines Hermes pastes above a message ([Recent channel messages]),
+# when they are not in the transcript already. yes or no.
+transcript.channel_context = yes
+# List tool calls under each reply, such as [read_file: notes.md]. yes or no.
+transcript.tools = yes
+
+# Finish each day's transcript after midnight, wiki pages included. yes or no.
+finalize = yes
+# Local time on the next day when the finished day is written one last time (HH:MM).
+# Default 02:00. A blank or unreadable value also means 02:00.
+finalize.after = 02:00
+# How often the plugin checks, in minutes.
+finalize.check.minutes = 10
+# If Hermes was off at that time, write up to this many missed days at the next check.
+finalize.catchup.days = 7
+# File that lists the days already finished. A day in it is never written again.
+# Blank: finalized.json in the plugin's data folder.
+finalize.state =
+# Never finish a day before this date (YYYY-MM-DD). Leave it blank for no limit.
+finalize.from =
+
+# Delete the plugin's own working files for finished days older than this many days:
+# journal/YYYY-MM-DD.jsonl and suggestions/YYYY-MM-DD.jsonl. 0 keeps everything (the default).
+# The daily transcripts, transcriptIndex.md, finalize.state and the wiki are never deleted,
+# and a day is never deleted until it is finished. Needs finalize = yes.
+keep.days = 0
+
+# Leave a message out of JEV's conversation when its first line matches.
+# Matching ignores capital letters. Add one skip.turn line per pattern.
+skip.turn = ^\[CONTEXT COMPACTION\b
+skip.turn = ^You've reached the maximum number of tool-calling iterations allowed
+
+# Markers wrapped around the wiki pages so a display can find them.
+recall.open = <!-- wiki-recall -->
+recall.close = <!-- /wiki-recall -->
+
+# Skip a message that has no words.
+skip.empty = yes
+# Skip a message that starts with /.
+skip.slash = yes
+# Skip a folder whose name starts with . or _.
+skip.hidden = yes
+
+# Skip the message when the whole text is a short reply such as thanks or hi.
+# ^ and $ mean the whole message. Matching ignores capital letters.
+skip.short = ^(yes|no|ok|okay|sure|thanks|thank you|y|n|yep|nope|yeah|nah|hi|hey|hello|yo|sup|continue|go ahead|do it|proceed|got it|cool|nice|great|done|next|lgtm|k)[\s!?.:;,"'~\-—–…()\[\]{}<>*&^%$#@!+=`]*$
+
+# Skip the message when the first line matches. Add one skip.line line per pattern.
+# Hermes's own heartbeat and background-process turns, alone or with a sender name in front:
+skip.line = ^\[Heartbeat\b
+skip.line = ^\[[^\]]{1,40}\] \[Heartbeat\b
+skip.line = ^\[IMPORTANT: Background process\b
+skip.line = ^\[[^\]]{1,40}\] \[IMPORTANT: Background process\b
+# Example: skip.line = ^\[system\] \[scheduled\b
+
+# Leave these folders unread. Add one skip.dir line per folder.
+# Example: skip.dir = attachments
+
+# File that holds each folder's glimpse.
+about.name = _about.md
+# The glimpse is the text between these two markers.
+glimpse.open = <!-- glimpse -->
+glimpse.close = <!-- /glimpse -->
+
+[folder.instructions]
+The conversation is above, from older to newer.
+"Earlier message" marks something said before the latest message.
+"Reply" marks the reply that followed.
+"New message" marks the message to answer now.
+Use the whole conversation, not only the new message, when you answer the question below.
+Folder: {label}
+Glimpse: {glimpse}
+Is this folder about the same subject as this conversation?
+[folder.yes]
+The glimpse describes the same subject as the conversation, including the earlier messages and the replies.
+[folder.no]
+The glimpse describes a different subject from the conversation.
+[child.instructions]
+The conversation is above, from older to newer.
+"Earlier message" marks something said before the latest message.
+"Reply" marks the reply that followed.
+"New message" marks the message to answer now.
+Use the whole conversation, not only the new message, when you answer the question below.
+Folder: {label}
+Glimpse: {glimpse}
+Is this folder about the same subject as this conversation?
+Answer no when this folder is only next to the real subject.
+[child.yes]
+The glimpse describes the same subject as the conversation.
+[child.no]
+This folder is only next to the real subject.
+[article.instructions]
+The conversation is above, from older to newer.
+"Earlier message" marks something said before the latest message.
+"Reply" marks the reply that followed.
+"New message" marks the message to answer now.
+Use the whole conversation, not only the new message, when you answer the question below.
+Article: {label}
+Glimpse: {glimpse}
+Is this page about the same subject as this conversation?
+Answer no when the conversation is about a different page in the same folder.
+[article.yes]
+This page describes the same subject as the conversation.
+[article.no]
+The conversation is about a different page.
+[nyx.header]
+Wiki pages for this conversation
+[nyx.glimpse]
+### {title}
+
+{glimpse}
+
+Match confidence: {score}
+File: {path}
+Short name: {slug}
+[nyx.tool]
+To read the whole page, call wiki_read with the short name or the file path above.
+[nyx.reminder]
+Wiki pages from earlier messages are still part of this conversation. Use a page from an earlier message when it fits the reply.
+[nyx.already]
+These pages were shown in an earlier message, so they are left out here: {pages}
+[nyx.missing]
+No wiki page matches {query}.
+[nyx.ambiguous]
+More than one page has the short name {slug}:
+{paths}
+Call wiki_read with the file path.
+[nyx.tool_description]
+Read the full wiki page. Pass the short name, such as soil, or the file path, such as garden/soil.md.
+[nyx.unconfigured]
+No wiki folder is set. Set wiki_path in the plugin settings.
