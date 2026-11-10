@@ -9,7 +9,8 @@ Every turn is recorded from the two hooks Hermes already calls:
 
 Each hook call appends one line to ``journal/YYYY-MM-DD.jsonl`` in the plugin's data folder.
 After each reply, today's Markdown file is rebuilt from that journal off the reply path, with
-``**Status:** open``. After midnight the finalizer writes the finished day once more with
+``**Status:** open``. A day runs from finalize.after (02:00) to finalize.after on the next
+date. When it ends the finalizer writes the finished day once more with
 ``**Status:** final``. A final file is never written again. A file this writer did not make is
 never replaced.
 
@@ -35,6 +36,7 @@ import sys
 import threading
 import time
 from datetime import date, datetime, timedelta
+from datetime import time as day_time
 from pathlib import Path
 
 if __package__:
@@ -53,7 +55,12 @@ MARKER = f"Exporter: {WRITER}"
 JOURNAL_VERSION = 1
 LOCK_NAME = ".nyx-wiki-recall.lock"
 INDEX_NAME = "transcriptIndex.md"
-DEFAULT_SKIP_PLATFORMS = "cron, subagent"
+DEFAULT_SKIP_PLATFORMS = "subagent"
+# A day's transcript runs from finalize.after on that date to finalize.after on the next (02:00 by
+# default), so a late-night conversation stays in one file. finalize.py finishes the day at that time.
+DEFAULT_DAY_ENDS = day_time(2, 0)
+# How a scheduled job (platform cron) is labelled: its heading, and the speaker of its prompt.
+CRON_LABEL = "Scheduled job"
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August",
@@ -117,7 +124,36 @@ def settings(questions) -> dict | None:
         "channel_context": questions.flag("transcript.channel_context", True),
         "tools": questions.flag("transcript.tools", True),
         "aliases": _aliases(questions.lines("transcript.alias")),
+        "day_ends": day_ends(questions).strftime("%H:%M"),
     }
+
+
+def day_ends(questions) -> day_time:
+    """finalize.after as a time: when one transcript day ends and the next begins. 02:00 when blank or bad."""
+    raw = (questions.get("finalize.after", "") if questions is not None else "").strip()
+    if not raw:
+        return DEFAULT_DAY_ENDS
+    try:
+        hour, minute = raw.split(":", 1)
+        return day_time(int(hour), int(minute))
+    except ValueError:
+        log.warning("nyx-wiki-recall: finalize.after %r is not HH:MM; using %s", raw, DEFAULT_DAY_ENDS)
+        return DEFAULT_DAY_ENDS
+
+
+def _day_shift(cfg: dict) -> timedelta:
+    raw = str(cfg.get("day_ends") or DEFAULT_DAY_ENDS.strftime("%H:%M"))
+    hour, minute = raw.split(":", 1)
+    return timedelta(hours=int(hour), minutes=int(minute))
+
+
+def day_at(cfg: dict, moment: datetime) -> date:
+    """The transcript day a local time belongs to: 01:30 on the 10th is the 9th when days end at 02:00."""
+    return (moment - _day_shift(cfg)).date()
+
+
+def day_of(cfg: dict, ts: float) -> date:
+    return day_at(cfg, datetime.fromtimestamp(ts))
 
 
 def _aliases(lines: list[str]) -> dict[str, str]:
@@ -162,7 +198,7 @@ def _skipped_platform(cfg: dict, platform: str) -> bool:
 
 
 def _append(cfg: dict, row: dict) -> Path:
-    day = datetime.fromtimestamp(row["ts"]).date()
+    day = day_of(cfg, float(row["ts"]))
     folder = Path(cfg["journal"])
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{day.isoformat()}.jsonl"
@@ -528,9 +564,13 @@ def wiki_lines(texts: list[str], index: dict[str, dict], keys: list[str] | None 
 
 # --- render -----------------------------------------------------------------------------------
 
+def _is_cron(row: dict) -> bool:
+    return (row.get("platform") or "").strip().lower() == "cron"
+
+
 def _where(row: dict, chats: dict[str, str]) -> str:
     platform = (row.get("platform") or "").strip() or "unknown"
-    label = platform[:1].upper() + platform[1:]
+    label = f"{CRON_LABEL} (cron)" if _is_cron(row) else platform[:1].upper() + platform[1:]
     session = (row.get("session") or "").strip()
     chat = (row.get("chat") or "").strip() or chats.get(session, "")
     if chat:
@@ -554,11 +594,14 @@ def _items(rows: list[dict], day: date, cfg: dict) -> tuple[list[dict], set[str]
     parsed: list[tuple[dict, str, str, str | None]] = []
     for row in rows:
         ts = float(row["ts"])
-        if datetime.fromtimestamp(ts).date() != day:
+        if day_of(cfg, ts) != day:
             continue
         if row["kind"] == "user":
             context, new = split_message(str(row.get("text") or ""))
-            who = _alias(cfg, speaker_for(new, str(row.get("name") or "").strip() or cfg["user"], _row_shared(row)))
+            if _is_cron(row):
+                who = CRON_LABEL  # the scheduler's prompt, not a person speaking
+            else:
+                who = _alias(cfg, speaker_for(new, str(row.get("name") or "").strip() or cfg["user"], _row_shared(row)))
             parsed.append((row, context, new, who))
             if who is not None:
                 plain.add(who, new, ts)
@@ -608,7 +651,7 @@ def _items(rows: list[dict], day: date, cfg: dict) -> tuple[list[dict], set[str]
 
 def render_day(day: date, rows: list[dict], cfg: dict, *, status: str, exported_at: datetime,
                index: dict[str, dict] | None = None) -> str | None:
-    """Markdown for one local day, or None when nothing was said that day."""
+    """Markdown for one transcript day (finalize.after to finalize.after), or None when nothing was said."""
     index = index or {}
     kept, sessions = _items(rows, day, cfg)
     if not kept:
@@ -636,7 +679,7 @@ def render_day(day: date, rows: list[dict], cfg: dict, *, status: str, exported_
     body = "\n".join(lines).rstrip() + "\n"
     body_sha = hashlib.sha256(body.encode("utf-8")).hexdigest()
     platforms = sorted({(row.get("platform") or "unknown") for row in rows
-                        if datetime.fromtimestamp(float(row["ts"])).date() == day})
+                        if day_of(cfg, float(row["ts"])) == day})
     header = "\n".join([
         f"# {MONTH_NAMES[day.month - 1]} {day.day}, {day.year}",
         "",
@@ -797,7 +840,7 @@ def write_day(cfg: dict, day: date, *, status: str, now: datetime | None = None)
 
 def refresh_today(cfg: dict, now: datetime | None = None) -> str:
     now = now or datetime.now()
-    return write_day(cfg, now.date(), status="open", now=now)
+    return write_day(cfg, day_at(cfg, now), status="open", now=now)
 
 
 def refresh_index(folder: Path) -> None:

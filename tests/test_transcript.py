@@ -210,10 +210,17 @@ class SpeakersTest(FreshHome):
         self.assertIn("### Assistant (2026-03-04 08:00:02)\n\nChecking.", text)
         self.assertIn("### Assistant (2026-03-04 08:01:00)\n\nDone.", text)
 
-    def test_cron_and_subagent_are_not_recorded(self):
-        self.turn("Scheduled job prompt", "done", at=ts(8), platform="cron")
+    def test_cron_is_recorded_as_a_scheduled_job_and_subagent_is_not(self):
+        self.turn("[IMPORTANT: You are running as a scheduled cron job. Deliver your answer.] Archive the day.",
+                  "Archived.", at=ts(8), platform="cron", chat_type="")
         self.turn("Delegated task", "done", at=ts(9), platform="subagent")
-        self.assertIsNone(self.render())
+        text = self.render()
+        self.assertIn("## Scheduled job (cron)", text)
+        self.assertIn("### Scheduled job (2026-03-04 08:00:00)", text)
+        self.assertIn("[IMPORTANT: You are running as a scheduled cron job.", text)
+        self.assertIn("Archived.", text)
+        self.assertNotIn("Delegated task", text)
+        self.assertIn("**Messages:** 2", text)
 
     def test_retried_hook_is_one_turn_and_tools_are_listed(self):
         history = [
@@ -322,7 +329,7 @@ class HookTest(FreshHome):
         ctx.hooks["post_llm_call"](session_id="s1", turn_id="t1", platform="telegram",
                                    assistant_response="Compost, mostly.", conversation_history=[])
         self.assertTrue(sys.modules[f"{name}.suggestions"].wait_for_refresh(10.0))
-        today = self.data / "transcripts" / transcript.daily_name(datetime.now().date())
+        today = self.data / "transcripts" / transcript.daily_name(transcript.day_at(self.cfg, datetime.now()))
         text = today.read_text(encoding="utf-8")
         self.assertIn("**Status:** open", text)
         self.assertIn("### Robin (", text)

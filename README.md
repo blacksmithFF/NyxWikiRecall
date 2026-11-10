@@ -2,7 +2,7 @@
 
 NyxWikiRecall attaches short wiki glimpses to a Hermes turn. A decision model picks the glimpses. The agent calls `wiki_read` when it wants the whole article.
 
-It also writes a daily Markdown transcript of every conversation, by itself, and finishes each day after midnight. Install it and it keeps the transcripts that a wiki is built from. Nothing else needs to be installed or scheduled.
+It also writes a daily Markdown transcript of every conversation, by itself, and finishes each day when it ends (02:00 by default). Install it and it keeps the transcripts that a wiki is built from. Nothing else needs to be installed or scheduled.
 
 ## Setup
 
@@ -33,7 +33,7 @@ Set `OPENROUTER_API_KEY` the usual Hermes way. The plugin reads it through Herme
 
 ### Transcripts out of the box
 
-Once the hook is enabled, transcripts need no setting at all: `transcript = yes` and `finalize = yes` are the shipped values, and a missing setting means the same. Each day's file goes to `<Hermes home>/plugin-data/nyx-wiki-recall/transcripts/` (for example `~/.hermes/plugin-data/nyx-wiki-recall/transcripts/Mar-04-2026-transcript.md`), and is finished as `Status: final` after 02:00 the next morning. With a key and a wiki, every message the decision model scored gets its `Wiki pages:` block in that file, also with no setting (`suggestions.folder` defaults to `suggestions/` in the same data folder). Set `transcript.folder` only if you want the files somewhere else, such as a synced folder. `tests/test_out_of_the_box.py` loads the plugin with no settings, runs a turn, and checks that the day's file is written and later finished.
+Once the hook is enabled, transcripts need no setting at all: `transcript = yes` and `finalize = yes` are the shipped values, and a missing setting means the same. Each day's file goes to `<Hermes home>/plugin-data/nyx-wiki-recall/transcripts/` (for example `~/.hermes/plugin-data/nyx-wiki-recall/transcripts/Mar-04-2026-transcript.md`), covers 02:00 to 02:00 (`finalize.after`), and is finished as `Status: final` at 02:00 the next morning. With a key and a wiki, every message the decision model scored gets its `Wiki pages:` block in that file, also with no setting (`suggestions.folder` defaults to `suggestions/` in the same data folder). Set `transcript.folder` only if you want the files somewhere else, such as a synced folder. `tests/test_out_of_the_box.py` loads the plugin with no settings, runs a turn, and checks that the day's file is written and later finished.
 
 `wiki_path` unset, a missing questions file, or a missing key means no glimpses. Transcripts are written in every one of those cases. With no key the plugin logs one warning when it loads, saying lookups are off; it then adds nothing to the prompt and writes no `Wiki pages:` line for any message until the key is set.
 
@@ -103,7 +103,7 @@ In both positions the hook stays loaded (`kind: standalone` in `plugin.yaml`). W
 
 ## Transcripts
 
-Every turn is recorded from the hooks Hermes already calls: `pre_llm_call` gives the message (with `session_id`, `turn_id`, `platform`, `sender_id`), and `post_llm_call` gives the reply and the turn's messages, so tool calls can be listed. This works on every platform Hermes serves (Discord, Telegram, Slack, the CLI, and the rest). Turns from `cron` and `subagent` are left out by default (`transcript.skip.platforms`).
+Every turn is recorded from the hooks Hermes already calls: `pre_llm_call` gives the message (with `session_id`, `turn_id`, `platform`, `sender_id`), and `post_llm_call` gives the reply and the turn's messages, so tool calls can be listed. This works on every platform Hermes serves (Discord, Telegram, Slack, the CLI, and the rest). Turns from `subagent` are left out by default (`transcript.skip.platforms`). Scheduled jobs (`cron`) are recorded under a `## Scheduled job (cron)` heading, with the scheduler's prompt as `### Scheduled job (...)`; add `cron` to `transcript.skip.platforms` to leave them out.
 
 Scheduled (cron) jobs also get no wiki lookup by default: a lookup costs a decision-model call and adds glimpses to the job's prompt, which an archivist job reading the wiki directly does not need. `lookups.on_cron = yes` turns lookups back on for cron turns. A turn counts as cron when Hermes runs it from its scheduler (the hook's `platform` is `cron`, or Hermes bound `HERMES_CRON_SESSION` for the job). This setting does not change what is recorded; `transcript.skip.platforms` does that.
 
@@ -142,7 +142,7 @@ Common API-key and webhook-URL shapes are replaced with `[redacted]` in the jour
 
 ## Finishing each day
 
-With `finalize = yes` (the default), a background thread writes the day that just ended one last time at `finalize.after` (default 02:00), with `**Status:** final`, and notes it in `finalize.state` (default `finalized.json` in the data folder). A final day is never written again, and a file the plugin did not write is never replaced. Days missed while Hermes was off are written at the next check, oldest first, at most `finalize.catchup.days` (default 7). `finalize.from` sets the earliest day the plugin may finish. The first run only claims days that finish after it starts. The thread runs in both positions of `provider` and does not wait for a turn.
+A transcript day runs from `finalize.after` (default 02:00) to `finalize.after` on the next date, so a turn at 01:30 belongs to the day before, and the journal and the day file are named for that day. With `finalize = yes` (the default), a background thread writes the day that just ended one last time at `finalize.after`, with `**Status:** final`, and notes it in `finalize.state` (default `finalized.json` in the data folder). A final day is never written again, and a file the plugin did not write is never replaced. Days missed while Hermes was off are written at the next check, oldest first, at most `finalize.catchup.days` (default 7). `finalize.from` sets the earliest day the plugin may finish. The first run only claims days that finish after it starts. The thread runs in both positions of `provider` and does not wait for a turn.
 
 ### Old working files
 
@@ -205,7 +205,7 @@ Short name: {slug}
 
 ## Known limitations
 
-- A reply written after midnight lands at the top of the next day's transcript.
+- A reply written after `finalize.after` lands at the top of the next day's transcript, even when its message was just before. A lookup that finishes after the day is sealed is not in that day's `Wiki pages:`.
 - On Windows, two Hermes processes writing very long messages at the same moment can mix their lines in the journal. A damaged line is dropped.
 - Missed days are finished only within `finalize.catchup.days` (default 7). A day further back is never written as final.
 - In memory-provider mode, two chats at once may occasionally run an extra decision-model lookup. The output is never wrong.

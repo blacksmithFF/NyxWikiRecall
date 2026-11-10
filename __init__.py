@@ -1,7 +1,7 @@
 """NyxWikiRecall: ask JEV which wiki glimpses fit this message, then attach those glimpses.
 
 The same two hooks also record every turn, so the plugin writes daily transcripts by itself
-(transcript.py) and finishes each day after midnight (finalize.py).
+(transcript.py) and finishes each day when it ends at finalize.after (finalize.py).
 """
 
 from __future__ import annotations
@@ -350,7 +350,7 @@ def register(ctx) -> None:
         path = _questions_path(ctx)
         return load(path) if path.is_file() else None
 
-    # Finish yesterday's transcript after midnight, in either position of provider. Not tied to a turn.
+    # Finish the day that just ended (at finalize.after), in either position of provider. Not tied to a turn.
     try:
         start_finalizer(_questions_now, Path(__file__).resolve().parent)
     except Exception as exc:

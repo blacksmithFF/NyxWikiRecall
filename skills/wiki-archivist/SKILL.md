@@ -393,8 +393,8 @@ hermes cron create "30 2 * * *" \
 - Check it with `hermes cron list`, run it once now with `hermes cron run <job id>`, and see past
   runs with `hermes cron runs <job id>`.
 
-The archivist's own cron turns are not written into the transcripts: the plugin leaves out the
-`cron` platform by default (`transcript.skip.platforms`).
+The archivist's own cron turns are written into the transcripts under `## Scheduled job (cron)`.
+Skip those sections when archiving, or add `cron` to `transcript.skip.platforms` to leave them out.
 
 ## 10. Day one: starting from an empty wiki
 

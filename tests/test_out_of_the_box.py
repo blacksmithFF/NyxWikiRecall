@@ -114,7 +114,7 @@ class OutOfTheBoxTest(unittest.TestCase):
 
     def _today(self) -> Path:
         transcript = self._sub("transcript")
-        return self.data / "transcripts" / transcript.daily_name(datetime.now().date())
+        return self.data / "transcripts" / transcript.daily_name(transcript.day_at({}, datetime.now()))
 
     def test_the_shipped_settings_turn_transcripts_and_finishing_on(self):
         questions = self._sub("questions").load(ROOT / "questions.txt")
@@ -160,13 +160,13 @@ class OutOfTheBoxTest(unittest.TestCase):
         self.assertIn("garden/soil.md", text)
         self.assertTrue(any((self.data / "suggestions").glob("*.jsonl")))
 
-    def test_the_day_is_finished_after_midnight_with_no_setting(self):
+    def test_the_day_is_finished_at_two_with_no_setting(self):
         self._key("")
         self._turn(_Ctx())
         finalize = self._sub("finalize")
         questions = self._sub("questions").load(ROOT / "questions.txt")
         # A state file that already covers the day before, as after a first run yesterday.
-        today = datetime.now().date()
+        today = self._sub("transcript").day_at({}, datetime.now())  # the transcript day: 02:00 to 02:00
         finalize.save_state(self.data / "finalized.json",
                             {"final_through": (today - timedelta(days=1)).isoformat(), "days": {}})
         later = datetime.combine(today + timedelta(days=1), datetime.min.time()) + timedelta(hours=2, minutes=5)

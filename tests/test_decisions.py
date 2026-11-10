@@ -408,16 +408,17 @@ class CronTest(_HookCase):
                                                   platform="discord"))
         self.assertTrue(self.asked)
 
-    def test_transcripts_for_cron_are_as_before(self):
-        # Shipped: cron is in transcript.skip.platforms, so a cron turn was never recorded and still isn't.
+    def test_cron_turns_are_recorded_without_a_lookup(self):
+        # Shipped: transcript.skip.platforms = subagent, so a cron turn is recorded, still with no lookup.
         _pkg, ctx = self.hooks(self.questions())
         ctx.hooks["pre_llm_call"](user_message=MESSAGE, conversation_history=[], session_id="c1", platform="cron")
-        self.assertEqual(self.journal(), [])
-        # Someone who records cron turns still gets them recorded, without a lookup.
-        _pkg, ctx = self.hooks(self.questions("transcript.skip.platforms = subagent\n"))
-        ctx.hooks["pre_llm_call"](user_message=MESSAGE, conversation_history=[], session_id="c2", platform="cron")
         self.assertEqual([r["platform"] for r in self.journal()], ["cron"])
         self.assertEqual(self.asked, [])
+
+    def test_cron_can_still_be_skipped(self):
+        _pkg, ctx = self.hooks(self.questions("transcript.skip.platforms = cron, subagent\n"))
+        ctx.hooks["pre_llm_call"](user_message=MESSAGE, conversation_history=[], session_id="c2", platform="cron")
+        self.assertEqual(self.journal(), [])
 
     def test_provider_on_a_cron_agent(self):
         path = self.questions(provider="yes")

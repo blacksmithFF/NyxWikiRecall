@@ -1,10 +1,11 @@
-"""Finish each day's transcript after midnight, inside the plugin, so no separate nightly exporter is needed.
+"""Finish each day's transcript when it ends, inside the plugin, so no separate nightly exporter is needed.
 
-A background thread wakes every finalize.check.minutes. Once the local clock passes finalize.after on the
-next day, it writes the finished day one last time, wiki pages included, and notes the day in
+A transcript day runs from finalize.after (02:00 by default) to finalize.after on the next date, so a
+turn at 01:30 belongs to the day before. A background thread wakes every finalize.check.minutes. Once the
+local clock passes finalize.after on the next date, it writes the finished day one last time, wiki pages included, and notes the day in
 finalize.state. The built-in writer (transcript.py) does the writing. A day already in that file is
 never written again. If Hermes was down at
-midnight, the next check writes every missed day in order (at most finalize.catchup.days), never a day
+that time, the next check writes every missed day in order (at most finalize.catchup.days), never a day
 before finalize.from, and never a day that came before the plugin first ran.
 
 After each check, keep.days (0, the default, keeps everything) removes the plugin's own working
@@ -59,14 +60,7 @@ def settings(questions, plugin_dir: Path | None = None) -> dict | None:
     writer = builtin.settings(questions)
     if writer is None:
         return None
-    raw_after = questions.get("finalize.after", "").strip()
-    after = DEFAULT_AFTER
-    if raw_after:
-        try:
-            hour, minute = raw_after.split(":", 1)
-            after = time(int(hour), int(minute))
-        except ValueError:
-            log.warning("nyx-wiki-recall: finalize.after %r is not HH:MM; using %s", raw_after, DEFAULT_AFTER)
+    after = builtin.day_ends(questions)
     try:
         check = max(1.0, float(questions.get("finalize.check.minutes", "") or DEFAULT_CHECK_MINUTES))
     except ValueError:
@@ -107,10 +101,10 @@ def keep_days(questions) -> int:
 
 
 def last_due_day(now: datetime, after: time) -> date:
-    """The newest day that is finished and past its grace time."""
-    if now.time() >= after:
-        return now.date() - timedelta(days=1)
-    return now.date() - timedelta(days=2)
+    """The newest finished day. A day ends at after on the next date (transcript.day_at), so at or after
+    02:00 on day D the day D-1 is due; before 02:00 it is still running and D-2 is the newest finished."""
+    current = (now - timedelta(hours=after.hour, minutes=after.minute)).date()
+    return current - timedelta(days=1)
 
 
 def load_state(path: Path) -> dict:

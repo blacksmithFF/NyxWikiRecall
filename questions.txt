@@ -82,7 +82,7 @@ lookups.on_cron = no
 suggestions.folder =
 
 # Daily transcripts. yes or no. With yes, every turn is recorded and one Markdown file per day
-# is written, then finished after midnight. Nothing else needs to be installed.
+# is written, then finished at finalize.after. Nothing else needs to be installed.
 transcript = yes
 # Folder for the daily files. Blank: transcripts/ in the plugin's data folder.
 transcript.folder =
@@ -96,18 +96,20 @@ transcript.assistant.name = Assistant
 # Show a chat display name as another name. One line per name.
 # Example: transcript.alias = gardener_42 -> Robin
 # Turns from these Hermes platforms are not recorded. Comma-separated.
-# cron is scheduled jobs; subagent is delegated work.
-transcript.skip.platforms = cron, subagent
+# subagent is delegated work. Scheduled jobs (cron) are recorded under a "Scheduled job (cron)"
+# heading; add cron here to leave them out.
+transcript.skip.platforms = subagent
 # Also keep the channel lines Hermes pastes above a message ([Recent channel messages]),
 # when they are not in the transcript already. yes or no.
 transcript.channel_context = yes
 # List tool calls under each reply, such as [read_file: notes.md]. yes or no.
 transcript.tools = yes
 
-# Finish each day's transcript after midnight, wiki pages included. yes or no.
+# Finish each day's transcript when it ends, wiki pages included. yes or no.
 finalize = yes
-# Local time on the next day when the finished day is written one last time (HH:MM).
-# Default 02:00. A blank or unreadable value also means 02:00.
+# Local time when a transcript day ends (HH:MM): a day runs from this time to this time on the
+# next date, so a turn at 01:30 belongs to the day before. The finished day is written one last
+# time then. Default 02:00. A blank or unreadable value also means 02:00. 00:00 gives calendar days.
 finalize.after = 02:00
 # How often the plugin checks, in minutes.
 finalize.check.minutes = 10
