@@ -31,6 +31,10 @@ Set `OPENROUTER_API_KEY` the usual Hermes way. The plugin reads it through Herme
 
 `questions.txt` sits next to `plugin.yaml`. Edit it to change the questions sent to the decision model, the skip rules, the transcript settings, and every sentence the plugin shows. The plugin reads the file again when it changes. `wiki_read`'s tool description is read when the plugin loads. To keep your edits outside the install folder, set `questions_path` next to `wiki_path`.
 
+### Transcripts out of the box
+
+Once the hook is enabled, transcripts need no setting at all: `transcript = yes` and `finalize = yes` are the shipped values, and a missing setting means the same. Each day's file goes to `<Hermes home>/plugin-data/nyx-wiki-recall/transcripts/` (for example `~/.hermes/plugin-data/nyx-wiki-recall/transcripts/Mar-04-2026-transcript.md`), and is finished as `Status: final` after 02:00 the next morning. With a key and a wiki, every message the decision model scored gets its `Wiki pages:` block in that file, also with no setting (`suggestions.folder` defaults to `suggestions/` in the same data folder). Set `transcript.folder` only if you want the files somewhere else, such as a synced folder. `tests/test_out_of_the_box.py` loads the plugin with no settings, runs a turn, and checks that the day's file is written and later finished.
+
 `wiki_path` unset, a missing questions file, or a missing key means no glimpses. Transcripts are written in every one of those cases. With no key the plugin logs one warning when it loads, saying lookups are off; it then adds nothing to the prompt and writes no `Wiki pages:` line for any message until the key is set.
 
 Requires Hermes 0.22.5 or newer.
