@@ -6,7 +6,16 @@ It also writes a daily Markdown transcript of every conversation, by itself, and
 
 ## Setup
 
-Put this folder where Hermes loads plugins, or point Hermes at it. In `config.yaml`:
+Install it and turn on its hook:
+
+```bash
+hermes plugins install blacksmithFF/NyxWikiRecall --no-enable
+hermes plugins enable nyx-wiki-recall
+```
+
+Use `--no-enable` and then `hermes plugins enable`. Because the plugin can also serve as a memory provider, Hermes 0.22.5's `hermes plugins install --enable` (or answering yes when it asks) makes it Hermes's `memory.provider`, replacing the one you had, and does not turn on the hook, so no transcripts are written. If that already happened, run `hermes plugins enable nyx-wiki-recall` and set `memory.provider` back to what it was. The plugin's log says so when it finds itself in that state.
+
+Or put this folder where Hermes loads plugins yourself. Either way, `config.yaml` ends up with:
 
 ```yaml
 plugins:

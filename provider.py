@@ -126,6 +126,15 @@ class WikiRecallProvider(MemoryProvider):
     def unavailable_reason(self) -> str:
         if self._flag_on():
             return ""
+        if _hook_enabled() is False:
+            # `hermes plugins install --enable` selects this plugin as memory.provider without
+            # listing it in plugins.enabled, so the hook (transcripts and glimpses) never loads.
+            return (
+                "questions.txt has provider = no, and the nyx-wiki-recall hook is not enabled, so no "
+                "transcripts are written and no glimpses are shown. Run `hermes plugins enable "
+                "nyx-wiki-recall`, then set memory.provider back to the provider you used before "
+                "(or leave it empty)."
+            )
         return (
             "questions.txt has provider = no. Set provider = yes there to use NyxWikiRecall as the "
             "memory provider; until then its glimpses come from the pre_llm_call hook."
@@ -140,6 +149,7 @@ class WikiRecallProvider(MemoryProvider):
         self._platform = "cron" if context == "cron" else str(kwargs.get("platform") or "")
         if self._flag_on():
             provider_up(self._owner)
+            _warn_once_hook_off()
         else:
             provider_down(self._owner)
 
@@ -204,14 +214,47 @@ class WikiRecallProvider(MemoryProvider):
         return text
 
 
-def _plugin_settings() -> dict:
+_hook_off_warned = False
+
+
+def _warn_once_hook_off() -> None:
+    """Provider on but hook off: glimpses still come from the provider, transcripts do not."""
+    global _hook_off_warned
+    if _hook_off_warned or _hook_enabled() is not False:
+        return
+    _hook_off_warned = True
+    log.warning(
+        "nyx-wiki-recall: the memory provider is on but the hook is not enabled, so no transcripts "
+        "are written. Run `hermes plugins enable nyx-wiki-recall` to turn transcripts on."
+    )
+
+
+def _hermes_config() -> dict | None:
+    """Hermes's config, read-only. None when it cannot be read."""
     try:
         from hermes_cli.config import load_config
 
         config = load_config()
     except Exception:
-        return {}
-    if not isinstance(config, dict):
+        return None
+    return config if isinstance(config, dict) else None
+
+
+def _hook_enabled() -> bool | None:
+    """Whether plugins.enabled lists this plugin. None when Hermes's config cannot be read."""
+    config = _hermes_config()
+    if config is None:
+        return None
+    plugins = config.get("plugins")
+    enabled = plugins.get("enabled") if isinstance(plugins, dict) else None
+    if not isinstance(enabled, list):
+        return False
+    return "nyx-wiki-recall" in {str(name).strip() for name in enabled}
+
+
+def _plugin_settings() -> dict:
+    config = _hermes_config()
+    if config is None:
         return {}
     plugins = config.get("plugins")
     if not isinstance(plugins, dict):

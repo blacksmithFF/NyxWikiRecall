@@ -95,3 +95,50 @@ class ProviderTest(unittest.TestCase):
             self.assertEqual(provider.prefetch("thanks", session_id="s1"), "")
             self.assertIsNone(provider.recall_status())
             provider.shutdown()
+
+
+class HookOffInstallTest(unittest.TestCase):
+    """`hermes plugins install --enable` (Hermes 0.22.5) sets memory.provider to this plugin and leaves
+    plugins.enabled without it, so the hook never loads. Found in the live test on 2026-11-09."""
+
+    def _provider(self, tmp, flag):
+        path = Path(tmp) / "questions.txt"
+        path.write_text(f"provider = {flag}\n", encoding="utf-8")
+        return WikiRecallProvider(questions_path=str(path))
+
+    def test_the_reason_says_the_hook_is_off_and_how_to_turn_it_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = self._provider(tmp, "no")
+            config = {"memory": {"provider": "nyx-wiki-recall"}, "plugins": {"entries": {}}}
+            with mock.patch.object(provider_module, "_hermes_config", return_value=config):
+                reason = provider.unavailable_reason()
+            self.assertIn("hook is not enabled", reason)
+            self.assertIn("hermes plugins enable nyx-wiki-recall", reason)
+            self.assertNotIn("come from the pre_llm_call hook", reason)
+
+    def test_the_reason_is_unchanged_when_the_hook_is_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = self._provider(tmp, "no")
+            config = {"plugins": {"enabled": ["nyx-wiki-recall"]}}
+            with mock.patch.object(provider_module, "_hermes_config", return_value=config):
+                self.assertIn("come from the pre_llm_call hook", provider.unavailable_reason())
+
+    def test_an_unreadable_config_keeps_the_old_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = self._provider(tmp, "no")
+            with mock.patch.object(provider_module, "_hermes_config", return_value=None):
+                self.assertIn("come from the pre_llm_call hook", provider.unavailable_reason())
+
+    def test_provider_on_with_the_hook_off_warns_once_that_transcripts_are_off(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = self._provider(tmp, "yes")
+            config = {"memory": {"provider": "nyx-wiki-recall"}}
+            with mock.patch.object(provider_module, "_hermes_config", return_value=config), \
+                    mock.patch.object(provider_module, "_hook_off_warned", False), \
+                    self.assertLogs("nyx-wiki-recall", level="WARNING") as logs:
+                provider.initialize("s1", hermes_home=tmp)
+                provider.initialize("s2", hermes_home=tmp)
+                provider.shutdown()
+            warnings = [line for line in logs.output if "no transcripts" in line]
+            self.assertEqual(len(warnings), 1)
+            self.assertIn("hermes plugins enable nyx-wiki-recall", warnings[0])
